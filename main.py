@@ -1,6 +1,7 @@
+import sys
 from multiprocessing import cpu_count
 
-from brute_force import brut_force_enigma
+from brute_force import brute_force_enigma
 from chiffrer import chiffrer
 from dechiffrer import dechiffrer
 
@@ -14,11 +15,15 @@ if __name__ == '__main__':
     message = "Les troupes britanniques sont entrees a Cuxhaven a quatorze heures le six mai Desormais tout le trafic radio cessera je vous souhaite le meilleur Fermeture pour toujours tout le meilleur au revoir."
 
     message_chiffrer = chiffrer(rotors, reflecteur, ring, plugboard, message)
-    print(message_chiffrer)
+    print("Message chiffré: ", message_chiffrer)
 
     # LESXTROUPESXBRITANNIQUESXSONTXENTREESXAXCUXHAVENXAXQUATORZEXHEURESXLEXSIXXMAIXDESORMAISXTOUTXLEXTRAFICXRADIOXCESSERAXJEXVOUSXSOUHAITEXLEXMEILLEURXFERMETUREXPOURXTOUJOURSXTOUTXLEXMEILLEURXAUXREVOIRX
     message_dechiffrer = dechiffrer(rotors, reflecteur, ring, plugboard, message_chiffrer)
-    print(message_dechiffrer)
+    print("Message déchiffré: ", message_dechiffrer)
+
+    print("\n\n\n")
+    print("Brut force")
+    print("\n\n\n")
 
     # # # # # # # # # # # # # # # # # # # #
     #            BRUT FORCE               #
@@ -28,24 +33,22 @@ if __name__ == '__main__':
     # La disposition des rotors est la suivante : 19 6 8
     # Les lettres sont branchées de la façon suivante : GH QW TZ RO IP AL SJ DK CN YM
 
-    print("Nombre de cpu: ", cpu_count())
+    nb_cpu = cpu_count()
+    print("Nombre de cpu: ", nb_cpu)
 
-    message_brut_force = "UFLTVDIPVYDQFLDZGEHBNLVVPNCMDTJBSBCISSQAJPWTIMJMRPTOMIKKYKGCJXBNKEQHSUAOMGUJOKLSNABOCSOMYGVLXCJCGVAAYSJFOSISJCAIYFHUJYYJDGGWNCZ"
+    message_brut_force_first_mail = "UFLTVDIPVYDQFLDZGEHBNLVVPNCMDTJBSBCISSQAJPWTIMJMRPTOMIKKYKGCJXBNKEQHSUAOMGUJOKLSNABOCSOMYGVLXCJCGVAAYSJFOSISJCAIYFHUJYYJDGGWNCZ"
+    message_brut_force_second_mail = "GRWYGBHCZRZKAOQDWJYKQSLNKGINIKUAHAUFKUKGRNVKUWOFTVNCKHDAYWKJBJYVWFFWNVXMLDGXARISRQJQOJGLEAYWNUWVDYUACPBMSJGRSOHAYRLINRHIPCBHJAZO"
 
-    brut_force_enigma(message_brut_force, "B", ["I", "II", "III", "IV", "V"], "19 6 8",
-                      "GH QW TZ RO IP AL SJ DK CN YM", "meteorologie")
+    # On protège le code qui lance l'attaque par brut force
+    try:
+        # On lance une attaque par brut force sur le premier message
+        brute_force_enigma(message_brut_force_second_mail,
+                           reflector="B",
+                           ring="19 6 8",
+                           plugboard="GH QW TZ RO IP AL SJ DK CN YM",
+                           start_word="meteorologie",
+                           mp=True)
 
-    # procs = []
-    # rotors_tests = [
-    #     ["I", "II", "III", "III", "IV", "V"],
-    # ]
-    #
-    # for rotor_test in rotors_tests:
-    #     proc = Process(target=brut_force_enigma, args=(
-    #         message_brut_force, "B", rotor_test, "19 6 8", "GH QW TZ RO IP AL SJ DK CN YM", "meteorologie"))
-    #
-    #     procs.append(proc)
-    #     proc.start()
-    #
-    # for proc in procs:
-    #     proc.join()
+    except KeyboardInterrupt:
+        print("Interruption manuelle de l'attaque par brut force...")
+        sys.exit(1)

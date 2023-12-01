@@ -1,4 +1,7 @@
+import sys
+
 from enigma.machine import EnigmaMachine
+from tqdm import tqdm
 
 
 def generate_machine(rotors="I V IV", reflector="B", ring="13 15 11", plugboard="NX EC RV GP SU DK IT FY BL AZ"):
@@ -58,3 +61,89 @@ def generate_kenngruppen():
                 kenngruppen.append(letter1 + letter2 + letter3)
 
     return kenngruppen
+
+
+def split_list(a_list, nb_split=2):
+    """
+    Sépare une liste en plusieurs sous-listes
+    :param a_list:      liste à splitter
+    :param nb_split:    nombre de sous-listes
+    :return:       liste de sous-listes
+    """
+    avg = len(a_list) / float(nb_split)
+    out = []
+    last = 0.0
+
+    while last < len(a_list):
+        out.append(a_list[int(last):int(last + avg)])
+        last += avg
+
+    return out
+
+
+def logic_find(
+        message_decrypt,
+        reflector="B",
+        ring="01 01 01",
+        plugboard="",
+        start_word="",
+        rotor_combinations=None,
+        kenngruppen=None,
+        q=None,
+        event=None,
+):
+    if rotor_combinations is None:
+        raise ValueError("The list of the rotor_combinations can't be None")
+
+    if kenngruppen is None:
+        raise ValueError("The list of kenngruppen can't be None")
+
+    if event is None:
+        raise ValueError("The event can't be None, it's used to stop all the processes")
+
+    # On teste toutes les combinaisons possibles de rotors
+    for rotor_combination in rotor_combinations:
+        # On teste toutes les combinaisons possibles de kenngruppen
+        for kenngruppe in kenngruppen:
+
+            # On crée une machine Enigma avec les paramètres donnés
+            machine = generate_machine(reflector=reflector, rotors=rotor_combination, ring=ring,
+                                       plugboard=plugboard)
+
+            # On définit la kenngruppe
+            machine.set_display(kenngruppe)
+
+            # On crypte le message
+            encrypted_message = machine.process_text(message_decrypt)
+
+            # On incrémente la queue pour afficher la progression
+            if q is not None:
+                q.put(1)
+
+            # On vérifie si le message crypté contient le mot recherché
+            if start_word.upper() in encrypted_message.upper():
+                # On arrête tous les processus, et on envoie le message crypté à l'event
+                event.set(dict(rotors=rotor_combination, kenngruppe=kenngruppe, message=encrypted_message))
+
+                sys.exit(1)
+
+    # Si on arrive ici, c'est que le mot n'a pas été trouvé
+    sys.exit(0)
+
+
+def queue_listener(q, nb_combinaisons):
+    """
+    Affiche la progression de la recherche dans la queue
+    :param q:                   queue
+    :param nb_combinaisons:     nombre de combinaisons à tester
+    :return:               None
+    """
+    pbar = tqdm(
+        position=0,
+        total=nb_combinaisons,
+        desc="Progression",
+        unit=" combinaisons",
+        leave=True,
+    )
+    for item in iter(q.get, None):
+        pbar.update()

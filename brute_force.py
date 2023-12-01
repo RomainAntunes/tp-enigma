@@ -1,48 +1,44 @@
+import sys
 import time
-from alive_progress import alive_bar
-from utils import generate_machine, generate_rotors_combinaison, generate_kenngruppen
+from multiprocessing import cpu_count, Process, Queue, Event
+
+from utils import generate_rotors_combinaison, generate_kenngruppen, split_list, logic_find, queue_listener
 
 
-def brut_force_enigma(message_decrypt,
-                      reflector="B",
-                      rotor_selection=None,
-                      ring="01 01 01",
-                      plugboard="",
-                      start_word=""):
+def brute_force_enigma(message_decrypt,
+                       reflector="B",
+                       ring="01 01 01",
+                       plugboard="",
+                       start_word="",
+                       mp=True):
     """
     Lance une attaque par brut force sur une machine Enigma
     :param message_decrypt:     message à décrypter
     :param reflector:           reflecteur à utiliser
-    :param rotor_selection:     liste des rotors à utiliser
     :param ring:                ring settings
     :param plugboard:           plugboard settings
     :param start_word:          mot de référence
+    :param mp:                  True si on veut utiliser le multiprocessing
     :return:                   None
     """
 
-    temp1 = time.time()
-
-    if rotor_selection is None:
-        rotor_selection = ["I", "II", "III", "IV", "V"]
-
-    if rotor_selection is not None:
-        # Vérifie que les rotors sont différents
-        if len(rotor_selection) != len(set(rotor_selection)):
-            print("Erreur: deux rotors sont identiques")
-            print("rotor_selection: ", rotor_selection)
-            return
+    temp1 = time.perf_counter()
 
     print("Brut force lancé avec les paramètres suivants:")
     print("Message à décrypter: ", message_decrypt)
     print("Reflector: ", reflector)
-    print("Rotors: ", rotor_selection)
     print("Ring: ", ring)
     print("Plugboard: ", plugboard)
     print("Mot de référence: ", start_word)
 
     # On génère toutes les combinaisons possibles de rotors
-    rotor_combinations = generate_rotors_combinaison(rotor_selection)
-    print("Nombre de combinaisons de rotors: ", len(rotor_combinations))
+    rotor_combinations = generate_rotors_combinaison()
+
+    # On récupère le nombre de cpu [Attention peut manger beaucoup de CPU si on enlève le // 2]
+    # nb_cpu = cpu_count() // 2
+    nb_cpu = 1 if not mp else cpu_count() // 2
+    print("Nombre de CPU Total:\t", cpu_count())
+    print("Nombre de CPU utilisés:\t", nb_cpu)
 
     # On génère toutes les combinaisons possibles de kenngruppen
     kenngruppen = generate_kenngruppen()
@@ -52,35 +48,48 @@ def brut_force_enigma(message_decrypt,
     nb_combinaisons = len(rotor_combinations) * len(kenngruppen)
     print("Nombre de combinaisons à tester: ", nb_combinaisons)
 
-    # Crée une progression de 0 à 100% avec un pas de 1%
-    with alive_bar(nb_combinaisons) as progress_bar:
-        # On teste toutes les combinaisons possibles de rotors
-        for rotor_combination in rotor_combinations:
-            # On teste toutes les combinaisons possibles de kenngruppen
-            for kenngruppe in kenngruppen:
+    # Vérifie que ne divise pas plus que le nombre de cœurs du processeur
+    if nb_cpu > cpu_count():
+        # Si c'est le cas, on met le nombre de cpu au nombre de cœurs du processeur - 1 (pour ne pas bloquer le PC)
+        nb_cpu = cpu_count() - 1
 
-                # On crée une machine Enigma avec les paramètres donnés
-                machine = generate_machine(reflector=reflector, rotors=rotor_combination, ring=ring, plugboard=plugboard)
+    # On sépare les rotors en plusieurs listes selon le nombre de cpu
+    rotors_splited = split_list(rotor_combinations, nb_cpu)
 
-                # On définit la kenngruppe
-                machine.set_display(kenngruppe)
+    procs = []
 
-                # On crypte le message
-                encrypted_message = machine.process_text(message_decrypt)
+    # On lance un processus qui va écouter la queue
+    q = Queue()
+    listener_proc = Process(target=queue_listener, args=(q, nb_combinaisons,), daemon=True)
+    procs.append(listener_proc)
 
-                # On incrémente la progression de 1/nb_combinaisons
-                progress_bar()
+    event = Event()
 
-                # On vérifie si le message crypté contient le mot recherché
-                if start_word in encrypted_message:
-                    temp2 = time.time()
-                    print("Message trouvé en", temp2 - temp1, "s")
-                    print("Temps d'execution: ", temp2 - temp1, "s")
-                    print("Rotors: ", rotor_combination)
-                    print("Kenngruppe: ", kenngruppe)
-                    print("Message crypté: ", encrypted_message)
-                    return
+    # On lance un processus par liste de rotors
+    for i in range(len(rotors_splited)):
+        proc = Process(target=logic_find,
+                       args=(message_decrypt, reflector, ring, plugboard, start_word, rotors_splited[i],
+                             kenngruppen, q, event),
+                       daemon=True)
+        procs.append(proc)
 
-    temp2 = time.time()
-    print("Message non trouvé")
+    # On lance tous les processus
+    for proc in procs:
+        proc.start()
+
+    # On attend que le message soit trouvé
+    event.wait()
+
+    # On arrête tous les processus
+    for proc in procs:
+        proc.terminate()
+
+    result = event.get()
+
+    print("Rotors: ", result["rotors"])
+    print("Kenngruppe: ", result["kenngruppe"])
+    print("Message crypté: ", result["message"])
+
+    temp2 = time.perf_counter()
     print("Temps d'execution: ", temp2 - temp1, "s")
+
