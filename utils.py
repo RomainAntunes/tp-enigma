@@ -91,6 +91,7 @@ def logic_find(
         kenngruppen=None,
         q=None,
         event=None,
+        result=None,
 ):
     if rotor_combinations is None:
         raise ValueError("The list of the rotor_combinations can't be None")
@@ -100,6 +101,9 @@ def logic_find(
 
     if event is None:
         raise ValueError("The event can't be None, it's used to stop all the processes")
+
+    if result is None:
+        raise ValueError("The result can't be None, it's used to send the result to the main process")
 
     # On teste toutes les combinaisons possibles de rotors
     for rotor_combination in rotor_combinations:
@@ -123,7 +127,8 @@ def logic_find(
             # On vérifie si le message crypté contient le mot recherché
             if start_word.upper() in encrypted_message.upper():
                 # On arrête tous les processus, et on envoie le message crypté à l'event
-                event.set(dict(rotors=rotor_combination, kenngruppe=kenngruppe, message=encrypted_message))
+                result.append(dict(rotors=rotor_combination, kenngruppe=kenngruppe, message=encrypted_message))
+                event.set()
 
                 sys.exit(1)
 
@@ -145,5 +150,5 @@ def queue_listener(q, nb_combinaisons):
         unit=" combinaisons",
         leave=True,
     )
-    for item in iter(q.get, None):
+    for _ in iter(q.get, None):
         pbar.update()

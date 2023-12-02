@@ -1,6 +1,5 @@
-import sys
 import time
-from multiprocessing import cpu_count, Process, Queue, Event
+from multiprocessing import cpu_count, Process, Queue, Event, Manager
 
 from utils import generate_rotors_combinaison, generate_kenngruppen, split_list, logic_find, queue_listener
 
@@ -63,13 +62,18 @@ def brute_force_enigma(message_decrypt,
     listener_proc = Process(target=queue_listener, args=(q, nb_combinaisons,), daemon=True)
     procs.append(listener_proc)
 
+    # Event qui permet de détecter quand le message est trouvé
     event = Event()
+
+    # On crée une variable qui va contenir le résultat
+    manager = Manager()
+    result = manager.list()
 
     # On lance un processus par liste de rotors
     for i in range(len(rotors_splited)):
         proc = Process(target=logic_find,
                        args=(message_decrypt, reflector, ring, plugboard, start_word, rotors_splited[i],
-                             kenngruppen, q, event),
+                             kenngruppen, q, event, result),
                        daemon=True)
         procs.append(proc)
 
@@ -84,12 +88,12 @@ def brute_force_enigma(message_decrypt,
     for proc in procs:
         proc.terminate()
 
-    result = event.get()
-
-    print("Rotors: ", result["rotors"])
-    print("Kenngruppe: ", result["kenngruppe"])
-    print("Message crypté: ", result["message"])
+    # On affiche le résultat
+    for r in result:
+        print("Résultat:")
+        print("Rotors: ", r["rotors"])
+        print("Kenngruppe: ", r["kenngruppe"])
+        print("Message: ", r["message"])
 
     temp2 = time.perf_counter()
     print("Temps d'execution: ", temp2 - temp1, "s")
-
